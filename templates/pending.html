@@ -6,12 +6,14 @@
         body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
         .container { max-width: 1200px; margin: 0 auto; }
         .header { background: #2c3e50; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
-        table { width: 100%; background: white; border-radius: 10px; overflow: hidden; }
+        table { width: 100%; background: white; border-collapse: collapse; border-radius: 10px; overflow: hidden; }
         th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
         th { background: #e67e22; color: white; }
-        .btn-approve { background: #27ae60; color: white; padding: 5px 15px; text-decoration: none; border-radius: 5px; }
-        .btn-reject { background: #e74c3c; color: white; padding: 5px 15px; text-decoration: none; border-radius: 5px; }
-        .back { display: inline-block; margin-top: 20px; color: #3498db; text-decoration: none; }
+        .btn-approve { background: #27ae60; color: white; padding: 5px 12px; text-decoration: none; border-radius: 5px; font-size: 12px; }
+        .btn-reject { background: #e74c3c; color: white; padding: 5px 12px; text-decoration: none; border-radius: 5px; font-size: 12px; }
+        .btn-delete { background: #7f8c8d; color: white; padding: 5px 12px; text-decoration: none; border-radius: 5px; font-size: 12px; }
+        .btn-delete:hover { background: #34495e; }
+        .back { display: inline-block; margin-top: 20px; background: #3498db; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; }
     </style>
 </head>
 <body>
@@ -20,30 +22,42 @@
             <span>⏳ Заявления на согласование</span>
             <a href="/dashboard" style="float:right; color:white;">← На главную</a>
         </div>
-
-        <table>
-            <tr>
-                <th>№</th>
-                <th>От кого</th>
-                <th>Тип</th>
-                <th>Дата</th>
-                <th>Причина</th>
-                <th>Действие</th>
-            </tr>
-            {% for app in applications %}
-            <tr>
-                <td>{{ app.number }}</td>
-                <td>{{ app.user_name }}</td>
-                <td>{{ app.type }}</td>
-                <td>{{ app.date }}</td>
-                <td>{{ app.reason }}</td>
-                <td>
-                    <a href="/approve/{{ app.number }}" class="btn-approve" onclick="return confirm('Одобрить?')">✅ Одобрить</a>
-                    <a href="/reject/{{ app.number }}" class="btn-reject">❌ Отклонить</a>
-                </td>
-            </tr>
-            {% endfor %}
-        </table>
+        
+        {% if applications %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>От кого</th>
+                        <th>Тип</th>
+                        <th>Дата</th>
+                        <th>Причина</th>
+                        <th>Действие</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for app in applications %}
+                    <tr>
+                        <td><strong>{{ app.number }}</strong></td>
+                        <td>{{ app.user_name }}</td>
+                        <td>{{ app.type }}</td>
+                        <td>{{ app.date }}</td>
+                        <td>{{ app.reason }}</td>
+                        <td>
+                            <a href="/approve/{{ app.number }}" class="btn-approve" onclick="return confirm('Одобрить?')">✅ Одобрить</a>
+                            <a href="/reject/{{ app.number }}" class="btn-reject">❌ Отклонить</a>
+                            <a href="/delete/{{ app.number }}" class="btn-delete" onclick="return confirm('Удалить заявление {{ app.number }}?')">🗑️ Удалить</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p style="text-align:center; padding:40px;">📭 Нет заявлений на согласовании</p>
+        {% endif %}
+        
+        <br>
+        <a href="/dashboard" class="back">← На главную</a>
     </div>
 </body>
 </html>
