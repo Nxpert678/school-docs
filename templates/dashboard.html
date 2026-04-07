@@ -98,6 +98,7 @@
             <a href="/apply" class="menu-card">📝 Подать заявление</a>
             <a href="/my_apps" class="menu-card">📋 Мои заявления ({{ my_apps }})</a>
             {% if user_role == 'director' %}
+                <a href="/pending" class="menu-card">⏳ На согласование ({{ pending }})</a>
                 <a href="/users" class="menu-card">👥 Управление пользователями</a>
             {% endif %}
         </div>
