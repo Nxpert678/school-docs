@@ -237,7 +237,17 @@ def add_user():
         role = request.form['role']
         class_name = request.form.get('class', '')
         
+        # Проверка: логин не должен быть пустым
+        if not login:
+            return "Ошибка: логин не может быть пустым"
+        
         users = load_users()
+        
+        # Проверка: логин не должен повторяться
+        for user in users.values():
+            if user['login'] == login:
+                return "Ошибка: пользователь с таким логином уже существует"
+        
         new_id = max(int(id) for id in users.keys()) + 1
         
         users[str(new_id)] = {
