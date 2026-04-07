@@ -387,6 +387,32 @@ def delete_user(user_id):
 
     return redirect(url_for('users'))
 
+@app.route('/api/delete/<number>')
+def api_delete_application(number):
+    if 'user_id' not in session:
+        return {"error": "Не авторизован"}, 401
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Проверяем, существует ли заявление и есть ли права
+    c.execute("SELECT user_id FROM applications WHERE number=?", (number,))
+    result = c.fetchone()
+    
+    if not result:
+        conn.close()
+        return {"error": "Заявление не найдено"}, 404
+    
+    # Удалить может: владелец ИЛИ директор
+    if result[0] != session['user_id'] and session['user_role'] != 'director':
+        conn.close()
+        return {"error": "Нет прав"}, 403
+    
+    c.execute("DELETE FROM applications WHERE number=?", (number,))
+    conn.commit()
+    conn.close()
+    
+    return {"success": True}
 
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':
