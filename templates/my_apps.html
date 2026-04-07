@@ -48,13 +48,13 @@
                             {% if app.status == 'pending' %}⏳ На согласовании
                             {% elif app.status == 'approved' %}✅ Одобрено
                             {% else %}❌ Отклонено{% endif %}
-                        </td>
+                         </td>
                         <td>
                             {% if app.reject_reason %}{{ app.reject_reason }}{% else %}-{% endif %}
-                        </td>
+                         </td>
                         <td>
                             <a href="/delete/{{ app.number }}" class="btn-delete" onclick="return confirm('Удалить заявление {{ app.number }}? Это действие нельзя отменить.')">🗑️ Удалить</a>
-                        </td>
+                         </td>
                     </tr>
                     {% endfor %}
                 </tbody>
