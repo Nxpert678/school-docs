@@ -199,12 +199,15 @@ def delete_application(number):
     if number not in apps:
         return "Заявление не найдено", 404
     
+    # Проверка прав: удалять может только владелец или директор
     if apps[number]['user_id'] != session['user_id'] and session['user_role'] != 'director':
         return "У вас нет прав на удаление этого заявления", 403
     
+    # Полностью удаляем заявление из словаря
     del apps[number]
     save_applications(apps)
     
+    # Возвращаемся на страницу моих заявлений
     return redirect(url_for('my_apps'))
 
 # ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (ДЛЯ ДИРЕКТОРА) ==========
