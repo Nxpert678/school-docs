@@ -216,6 +216,54 @@ def delete_application(number):
     save_applications(apps)
 
     return redirect(url_for('my_apps'))
+@app.route('/users')
+def users():
+    if 'user_id' not in session or session['user_role'] != 'director':
+        return "Доступ запрещён", 403
+    
+    users_data = load_users()
+    users_list = list(users_data.values())
+    return render_template('users.html', users=users_list)
+
+@app.route('/add_user', methods=['GET', 'POST'])
+def add_user():
+    if 'user_id' not in session or session['user_role'] != 'director':
+        return "Доступ запрещён", 403
+    
+    if request.method == 'POST':
+        name = request.form['name']
+        login = request.form['login']
+        password = request.form['password']
+        role = request.form['role']
+        class_name = request.form.get('class', '')
+        
+        users = load_users()
+        new_id = max(int(id) for id in users.keys()) + 1
+        
+        users[str(new_id)] = {
+            "id": new_id,
+            "name": name,
+            "role": role,
+            "login": login,
+            "password": password,
+            "class": class_name
+        }
+        save_users(users)
+        return redirect(url_for('users'))
+    
+    return render_template('add_user.html')
+
+@app.route('/delete_user/<user_id>')
+def delete_user(user_id):
+    if 'user_id' not in session or session['user_role'] != 'director':
+        return "Доступ запрещён", 403
+    
+    users = load_users()
+    if user_id in users and user_id != session['user_id']:
+        del users[user_id]
+        save_users(users)
+    
+    return redirect(url_for('users'))    
 
 
 # ========== ЗАПУСК ==========
