@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Подать заявление</title>
+    <style>
+        body { font-family: Arial; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .form-box { background: white; padding: 30px; border-radius: 10px; width: 400px; }
+        h2 { text-align: center; color: #2c3e50; }
+        input, select, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 100%; padding: 10px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .back { display: block; text-align: center; margin-top: 15px; color: #3498db; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="form-box">
+        <h2>📝 Новое заявление</h2>
+        <form method="post">
+            <select name="type" required>
+                <option value="Отгул">📅 Отгул</option>
+                <option value="Больничный">🩺 Больничный</option>
+                <option value="Отпуск">🏖️ Отпуск</option>
+                <option value="Служебная записка">📄 Служебная записка</option>
+            </select>
+            <input type="date" name="date" required>
+            <textarea name="reason" rows="4" placeholder="Причина заявления" required></textarea>
+            <button type="submit">Отправить</button>
+        </form>
+        <a href="/dashboard" class="back">← Назад</a>
+    </div>
+</body>
+</html>

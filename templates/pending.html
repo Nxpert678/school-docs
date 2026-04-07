@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>На согласование</title>
+    <style>
+        body { font-family: Arial; background: #f0f2f5; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header { background: #2c3e50; color: white; padding: 15px; border-radius: 10px; margin-bottom: 20px; }
+        table { width: 100%; background: white; border-radius: 10px; overflow: hidden; }
+        th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background: #e67e22; color: white; }
+        .btn-approve { background: #27ae60; color: white; padding: 5px 15px; text-decoration: none; border-radius: 5px; }
+        .btn-reject { background: #e74c3c; color: white; padding: 5px 15px; text-decoration: none; border-radius: 5px; }
+        .back { display: inline-block; margin-top: 20px; color: #3498db; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <span>⏳ Заявления на согласование</span>
+            <a href="/dashboard" style="float:right; color:white;">← На главную</a>
+        </div>
+
+        <table>
+            <tr>
+                <th>№</th>
+                <th>От кого</th>
+                <th>Тип</th>
+                <th>Дата</th>
+                <th>Причина</th>
+                <th>Действие</th>
+            </tr>
+            {% for app in applications %}
+            <tr>
+                <td>{{ app.number }}</td>
+                <td>{{ app.user_name }}</td>
+                <td>{{ app.type }}</td>
+                <td>{{ app.date }}</td>
+                <td>{{ app.reason }}</td>
+                <td>
+                    <a href="/approve/{{ app.number }}" class="btn-approve" onclick="return confirm('Одобрить?')">✅ Одобрить</a>
+                    <a href="/reject/{{ app.number }}" class="btn-reject">❌ Отклонить</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </table>
+    </div>
+</body>
+</html>
