@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Добавить пользователя</title>
+    <style>
+        body { font-family: Arial; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .form-box { background: white; padding: 30px; border-radius: 10px; width: 350px; }
+        input, select { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 100%; padding: 10px; background: #27ae60; color: white; border: none; border-radius: 5px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div class="form-box">
+        <h2>Добавить пользователя</h2>
+        <form method="post">
+            <input type="text" name="name" placeholder="ФИО" required>
+            <input type="text" name="login" placeholder="Логин" required>
+            <input type="password" name="password" placeholder="Пароль" required>
+            <select name="role">
+                <option value="teacher">Учитель</option>
+                <option value="director">Директор</option>
+            </select>
+            <input type="text" name="class" placeholder="Класс (для учителя)">
+            <button type="submit">Сохранить</button>
+        </form>
+        <a href="/users">Назад</a>
+    </div>
+</body>
+</html>
