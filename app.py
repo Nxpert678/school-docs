@@ -1,56 +1,98 @@
 from flask import Flask, render_template, request, redirect, url_for, session
-import json
+import sqlite3
 import os
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'school_secret_key_2026'
 
-# ========== РАБОТА С ПОЛЬЗОВАТЕЛЯМИ ==========
-def load_users():
-    if os.path.exists('users.json'):
-        with open('users.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    # Создаём тестовых пользователей
-    users = {
-        "1": {"id": 1, "name": "Директор", "role": "director", "login": "director", "password": "123"},
-        "2": {"id": 2, "name": "Иванова Мария", "role": "teacher", "class": "9А", "login": "teacher", "password": "123"},
-        "3": {"id": 3, "name": "Петров Сергей", "role": "teacher", "class": "9Б", "login": "petrov", "password": "123"}
-    }
-    with open('users.json', 'w', encoding='utf-8') as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
-    return users
+# ========== НАСТРОЙКА БАЗЫ ДАННЫХ ==========
+# На Render используем /var/data, на локальном компьютере - текущую папку
+DATA_DIR = '/var/data' if os.path.exists('/var/data') else '.'
+DATABASE = os.path.join(DATA_DIR, 'school.db')
 
-def save_users(users):
-    with open('users.json', 'w', encoding='utf-8') as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
+def get_db():
+    """Возвращает соединение с базой данных"""
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    return conn
 
-# ========== РАБОТА С ЗАЯВЛЕНИЯМИ ==========
-def load_applications():
-    if os.path.exists('applications.json'):
-        with open('applications.json', 'r', encoding='utf-8') as f:
-            return json.load(f)
-    return {}
+def init_db():
+    """Создаёт таблицы и начальных пользователей при первом запуске"""
+    conn = get_db()
+    c = conn.cursor()
+    
+    # Таблица пользователей
+    c.execute('''CREATE TABLE IF NOT EXISTS users
+                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                  name TEXT NOT NULL,
+                  role TEXT NOT NULL,
+                  class TEXT,
+                  login TEXT UNIQUE NOT NULL,
+                  password TEXT NOT NULL)''')
+    
+    # Таблица заявлений
+    c.execute('''CREATE TABLE IF NOT EXISTS applications
+                 (number TEXT PRIMARY KEY,
+                  user_id INTEGER NOT NULL,
+                  user_name TEXT NOT NULL,
+                  type TEXT NOT NULL,
+                  date TEXT NOT NULL,
+                  reason TEXT NOT NULL,
+                  status TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  reject_reason TEXT,
+                  FOREIGN KEY (user_id) REFERENCES users (id))''')
+    
+    # Таблица счётчика номеров
+    c.execute('''CREATE TABLE IF NOT EXISTS counter
+                 (id INTEGER PRIMARY KEY,
+                  next INTEGER NOT NULL)''')
+    
+    # Добавляем счётчик, если его нет
+    c.execute("SELECT * FROM counter WHERE id=1")
+    if not c.fetchone():
+        c.execute("INSERT INTO counter (id, next) VALUES (1, 1)")
+    
+    # Добавляем директора, если его нет
+    c.execute("SELECT * FROM users WHERE login='director'")
+    if not c.fetchone():
+        c.execute("INSERT INTO users (name, role, login, password) VALUES ('Директор', 'director', 'director', '123')")
+    
+    # Добавляем учителей, если их нет
+    teachers = [
+        ("Иванова Мария", "teacher", "9А", "ivanova", "123"),
+        ("Петров Сергей", "teacher", "9Б", "petrov", "123"),
+        ("Сидорова Анна", "teacher", "10А", "sidorova", "123"),
+        ("Козлов Дмитрий", "teacher", "10Б", "kozlov", "123"),
+        ("Морозова Елена", "teacher", "11А", "morozova", "123"),
+        ("Волков Андрей", "teacher", "11Б", "volkov", "123"),
+        ("Зайцева Ольга", "teacher", "7А", "zaitseva", "123"),
+    ]
+    
+    for name, role, class_name, login, password in teachers:
+        c.execute("SELECT * FROM users WHERE login=?", (login,))
+        if not c.fetchone():
+            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (?, ?, ?, ?, ?)",
+                      (name, role, class_name, login, password))
+    
+    conn.commit()
+    conn.close()
 
-def save_applications(apps):
-    with open('applications.json', 'w', encoding='utf-8') as f:
-        json.dump(apps, f, ensure_ascii=False, indent=2)
+# Инициализируем базу данных при запуске
+init_db()
 
+# ========== ФУНКЦИИ РАБОТЫ С БАЗОЙ ==========
 def get_next_number():
-    counter_file = 'counter.json'
-    if os.path.exists(counter_file):
-        with open(counter_file, 'r', encoding='utf-8') as f:
-            counter = json.load(f)
-    else:
-        counter = {"next": 1}
-    
-    num = counter["next"]
-    counter["next"] += 1
-    
-    with open(counter_file, 'w', encoding='utf-8') as f:
-        json.dump(counter, f)
-    
-    return f"APP-{num:03d}"
+    """Возвращает следующий номер заявления (APP-001, APP-002...)"""
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT next FROM counter WHERE id=1")
+    next_num = c.fetchone()[0]
+    c.execute("UPDATE counter SET next = ? WHERE id=1", (next_num + 1,))
+    conn.commit()
+    conn.close()
+    return f"APP-{next_num:03d}"
 
 # ========== РОУТЫ ==========
 @app.route('/')
@@ -65,13 +107,17 @@ def login():
         login = request.form['login']
         password = request.form['password']
         
-        users = load_users()
-        for user_id, user in users.items():
-            if user['login'] == login and user['password'] == password:
-                session['user_id'] = user_id
-                session['user_name'] = user['name']
-                session['user_role'] = user['role']
-                return redirect(url_for('dashboard'))
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("SELECT * FROM users WHERE login=? AND password=?", (login, password))
+        user = c.fetchone()
+        conn.close()
+        
+        if user:
+            session['user_id'] = user['id']
+            session['user_name'] = user['name']
+            session['user_role'] = user['role']
+            return redirect(url_for('dashboard'))
         
         return render_template('login.html', error="Неверный логин или пароль")
     
@@ -87,14 +133,26 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    apps = load_applications()
-    user_id = session['user_id']
+    conn = get_db()
+    c = conn.cursor()
     
-    all_apps = len(apps)
-    pending = sum(1 for a in apps.values() if a['status'] == 'pending')
-    approved = sum(1 for a in apps.values() if a['status'] == 'approved')
-    rejected = sum(1 for a in apps.values() if a['status'] == 'rejected')
-    my_apps = sum(1 for a in apps.values() if a['user_id'] == user_id)
+    # Статистика
+    c.execute("SELECT COUNT(*) FROM applications")
+    all_apps = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM applications WHERE status='pending'")
+    pending = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM applications WHERE status='approved'")
+    approved = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM applications WHERE status='rejected'")
+    rejected = c.fetchone()[0]
+    
+    c.execute("SELECT COUNT(*) FROM applications WHERE user_id=?", (session['user_id'],))
+    my_apps = c.fetchone()[0]
+    
+    conn.close()
     
     return render_template('dashboard.html', 
                          user_name=session['user_name'],
@@ -118,20 +176,17 @@ def apply():
         date = request.form['date']
         reason = request.form['reason']
         
-        apps = load_applications()
         number = get_next_number()
         
-        apps[number] = {
-            "number": number,
-            "user_id": session['user_id'],
-            "user_name": session['user_name'],
-            "type": app_type,
-            "date": date,
-            "reason": reason,
-            "status": "pending",
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-        save_applications(apps)
+        conn = get_db()
+        c = conn.cursor()
+        c.execute('''INSERT INTO applications 
+                     (number, user_id, user_name, type, date, reason, status, created_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (number, session['user_id'], session['user_name'], app_type, date, reason, 'pending', 
+                   datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
+        conn.commit()
+        conn.close()
         
         return redirect(url_for('my_apps'))
     
@@ -142,35 +197,37 @@ def my_apps():
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    apps = load_applications()
-    user_id = session['user_id']
-    my_apps_list = [a for a in apps.values() if a['user_id'] == user_id]
-    my_apps_list.reverse()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM applications WHERE user_id=? ORDER BY created_at DESC", (session['user_id'],))
+    applications = c.fetchall()
+    conn.close()
     
-    return render_template('my_apps.html', applications=my_apps_list)
+    return render_template('my_apps.html', applications=applications)
 
 @app.route('/pending')
 def pending():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
+    if 'user_id' not in session or session['user_role'] != 'director':
+        return "Доступ запрещён", 403
     
-    if session['user_role'] != 'director':
-        return "Доступ только для директора", 403
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM applications WHERE status='pending' ORDER BY created_at DESC")
+    applications = c.fetchall()
+    conn.close()
     
-    apps = load_applications()
-    pending_list = [a for a in apps.values() if a['status'] == 'pending']
-    
-    return render_template('pending.html', applications=pending_list)
+    return render_template('pending.html', applications=applications)
 
 @app.route('/approve/<number>')
 def approve(number):
     if 'user_id' not in session or session['user_role'] != 'director':
         return "Доступ запрещён", 403
     
-    apps = load_applications()
-    if number in apps and apps[number]['status'] == 'pending':
-        apps[number]['status'] = 'approved'
-        save_applications(apps)
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("UPDATE applications SET status='approved' WHERE number=?", (number,))
+    conn.commit()
+    conn.close()
     
     return redirect(url_for('pending'))
 
@@ -181,11 +238,11 @@ def reject(number):
     
     if request.method == 'POST':
         reason = request.form['reason']
-        apps = load_applications()
-        if number in apps and apps[number]['status'] == 'pending':
-            apps[number]['status'] = 'rejected'
-            apps[number]['reject_reason'] = reason
-            save_applications(apps)
+        conn = get_db()
+        c = conn.cursor()
+        c.execute("UPDATE applications SET status='rejected', reject_reason=? WHERE number=?", (reason, number))
+        conn.commit()
+        conn.close()
         return redirect(url_for('pending'))
     
     return render_template('reject.html', number=number)
@@ -195,30 +252,77 @@ def delete_application(number):
     if 'user_id' not in session:
         return redirect(url_for('login'))
     
-    apps = load_applications()
+    conn = get_db()
+    c = conn.cursor()
     
-    if number not in apps:
+    # Проверяем права на удаление
+    c.execute("SELECT user_id FROM applications WHERE number=?", (number,))
+    result = c.fetchone()
+    
+    if not result:
+        conn.close()
         return "Заявление не найдено", 404
     
-    # Проверка прав: удалять может только владелец или директор
-    if apps[number]['user_id'] != session['user_id'] and session['user_role'] != 'director':
-        return "У вас нет прав на удаление этого заявления", 403
+    if result[0] != session['user_id'] and session['user_role'] != 'director':
+        conn.close()
+        return "У вас нет прав на удаление", 403
     
-    # Полностью удаляем заявление из словаря
-    del apps[number]
-    save_applications(apps)
+    c.execute("DELETE FROM applications WHERE number=?", (number,))
+    conn.commit()
+    conn.close()
     
-    # Возвращаемся на страницу моих заявлений
     return redirect(url_for('my_apps'))
 
-# ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ (ДЛЯ ДИРЕКТОРА) ==========
+# ========== API ДЛЯ КАРТОЧЕК ==========
+@app.route('/api/applications')
+def api_applications():
+    if 'user_id' not in session:
+        return {"error": "Не авторизован"}, 401
+    
+    status = request.args.get('status', 'all')
+    
+    conn = get_db()
+    c = conn.cursor()
+    
+    if status == 'pending':
+        c.execute("SELECT * FROM applications WHERE status='pending' ORDER BY created_at DESC")
+    elif status == 'approved':
+        c.execute("SELECT * FROM applications WHERE status='approved' ORDER BY created_at DESC")
+    elif status == 'rejected':
+        c.execute("SELECT * FROM applications WHERE status='rejected' ORDER BY created_at DESC")
+    else:
+        c.execute("SELECT * FROM applications ORDER BY created_at DESC")
+    
+    apps = c.fetchall()
+    conn.close()
+    
+    # Преобразуем Row в список словарей
+    result = []
+    for app in apps:
+        result.append({
+            'number': app['number'],
+            'user_name': app['user_name'],
+            'type': app['type'],
+            'date': app['date'],
+            'reason': app['reason'],
+            'status': app['status'],
+            'reject_reason': app['reject_reason']
+        })
+    
+    return result
+
+# ========== УПРАВЛЕНИЕ ПОЛЬЗОВАТЕЛЯМИ ==========
 @app.route('/users')
 def users():
     if 'user_id' not in session or session['user_role'] != 'director':
         return "Доступ запрещён", 403
     
-    users_data = load_users()
-    users_list = list(users_data.values())
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM users ORDER BY id")
+    users_list = c.fetchall()
+    conn.close()
+    
     return render_template('users.html', users=users_list)
 
 @app.route('/add_user', methods=['GET', 'POST'])
@@ -233,62 +337,38 @@ def add_user():
         role = request.form['role']
         class_name = request.form.get('class', '')
         
-        users = load_users()
+        conn = get_db()
+        c = conn.cursor()
         
-        # Проверка: логин не должен повторяться
-        for user in users.values():
-            if user['login'] == login:
-                return "Ошибка: пользователь с таким логином уже существует"
+        try:
+            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (?, ?, ?, ?, ?)",
+                      (name, role, class_name, login, password))
+            conn.commit()
+        except sqlite3.IntegrityError:
+            conn.close()
+            return "Ошибка: пользователь с таким логином уже существует"
         
-        new_id = max(int(id) for id in users.keys()) + 1
-        
-        users[str(new_id)] = {
-            "id": new_id,
-            "name": name,
-            "role": role,
-            "login": login,
-            "password": password,
-            "class": class_name
-        }
-        save_users(users)
+        conn.close()
         return redirect(url_for('users'))
     
     return render_template('add_user.html')
 
-@app.route('/delete_user/<user_id>')
+@app.route('/delete_user/<int:user_id>')
 def delete_user(user_id):
     if 'user_id' not in session or session['user_role'] != 'director':
         return "Доступ запрещён", 403
     
-    users = load_users()
-    if user_id in users and user_id != session['user_id']:
-        del users[user_id]
-        save_users(users)
+    if user_id == session['user_id']:
+        return "Нельзя удалить самого себя", 403
+    
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM users WHERE id=?", (user_id,))
+    conn.commit()
+    conn.close()
     
     return redirect(url_for('users'))
-# ========== API ДЛЯ ПОЛУЧЕНИЯ ЗАЯВЛЕНИЙ (ДЛЯ МОДАЛЬНЫХ ОКОН) ==========
 
-@app.route('/api/applications')
-def api_applications():
-    if 'user_id' not in session:
-        return {"error": "Не авторизован"}, 401
-    
-    status = request.args.get('status', 'all')
-    apps = load_applications()
-    apps_list = list(apps.values())
-    
-    # Фильтрация по статусу
-    if status == 'pending':
-        apps_list = [a for a in apps_list if a['status'] == 'pending']
-    elif status == 'approved':
-        apps_list = [a for a in apps_list if a['status'] == 'approved']
-    elif status == 'rejected':
-        apps_list = [a for a in apps_list if a['status'] == 'rejected']
-    
-    # Сортировка: новые сверху
-    apps_list.reverse()
-    
-    return apps_list
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
