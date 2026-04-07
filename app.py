@@ -262,7 +262,29 @@ def delete_user(user_id):
         save_users(users)
     
     return redirect(url_for('users'))
+# ========== API ДЛЯ ПОЛУЧЕНИЯ ЗАЯВЛЕНИЙ (ДЛЯ МОДАЛЬНЫХ ОКОН) ==========
 
+@app.route('/api/applications')
+def api_applications():
+    if 'user_id' not in session:
+        return {"error": "Не авторизован"}, 401
+    
+    status = request.args.get('status', 'all')
+    apps = load_applications()
+    apps_list = list(apps.values())
+    
+    # Фильтрация по статусу
+    if status == 'pending':
+        apps_list = [a for a in apps_list if a['status'] == 'pending']
+    elif status == 'approved':
+        apps_list = [a for a in apps_list if a['status'] == 'approved']
+    elif status == 'rejected':
+        apps_list = [a for a in apps_list if a['status'] == 'rejected']
+    
+    # Сортировка: новые сверху
+    apps_list.reverse()
+    
+    return apps_list
 # ========== ЗАПУСК ==========
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5000)
