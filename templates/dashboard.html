@@ -40,7 +40,7 @@
             padding: 20px;
             border-radius: 10px;
             width: 85%;
-            max-width: 1000px;
+            max-width: 1200px;
             max-height: 80%;
             overflow-y: auto;
         }
@@ -66,6 +66,8 @@
         .status-approved { color: #27ae60; font-weight: bold; }
         .status-rejected { color: #e74c3c; font-weight: bold; }
         tr:hover { background: #f5f5f5; }
+        .btn-delete-modal { background: #e74c3c; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; }
+        .btn-delete-modal:hover { background: #c0392b; }
     </style>
 </head>
 <body>
@@ -165,6 +167,26 @@
                 });
         }
 
+        function deleteApp(number) {
+            if (confirm('Удалить заявление ' + number + '? Это действие нельзя отменить.')) {
+                fetch('/api/delete/' + number)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert('Заявление удалено');
+                            // Обновляем текущее модальное окно
+                            const modalTitle = document.getElementById('modalTitle').innerText;
+                            if (modalTitle.includes('Все')) showAllApps();
+                            else if (modalTitle.includes('согласовании')) showPendingApps();
+                            else if (modalTitle.includes('Одобренные')) showApprovedApps();
+                            else if (modalTitle.includes('Отклонённые')) showRejectedApps();
+                        } else {
+                            alert('Ошибка: ' + (data.error || 'неизвестная ошибка'));
+                        }
+                    });
+            }
+        }
+
         function displayApplications(apps) {
             const modalBody = document.getElementById('modalBody');
             
@@ -174,7 +196,7 @@
             }
 
             let html = `
-                <table>
+                <table style="width:100%; border-collapse: collapse;">
                     <thead>
                         <tr>
                             <th>№</th>
@@ -184,6 +206,7 @@
                             <th>Причина</th>
                             <th>Статус</th>
                             <th>Причина отказа</th>
+                            <th>Действие</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -214,6 +237,9 @@
                         <td>${app.reason}</td>
                         <td class="${statusClass}">${statusText}</td>
                         <td style="color:#e74c3c;">${app.reject_reason || '-'}</td>
+                        <td>
+                            <button onclick="deleteApp('${app.number}')" class="btn-delete-modal">🗑️ Удалить</button>
+                        </td>
                     </tr>
                 `;
             }
