@@ -33,6 +33,7 @@
                         <th>Дата</th>
                         <th>Причина</th>
                         <th>Статус</th>
+                        <th>Причина отказа</th>
                         <th>Действие</th>
                     </tr>
                 </thead>
@@ -47,12 +48,12 @@
                             {% if app.status == 'pending' %}⏳ На согласовании
                             {% elif app.status == 'approved' %}✅ Одобрено
                             {% else %}❌ Отклонено{% endif %}
-                            {% if app.reject_reason %}<br><small>({{ app.reject_reason }})</small>{% endif %}
                         </td>
                         <td>
-                            {% if app.status == 'pending' %}
-                                <a href="/delete/{{ app.number }}" class="btn-delete" onclick="return confirm('Удалить заявление {{ app.number }}?')">🗑️ Удалить</a>
-                            {% endif %}
+                            {% if app.reject_reason %}{{ app.reject_reason }}{% else %}-{% endif %}
+                        </td>
+                        <td>
+                            <a href="/delete/{{ app.number }}" class="btn-delete" onclick="return confirm('Удалить заявление {{ app.number }}? Это действие нельзя отменить.')">🗑️ Удалить</a>
                         </td>
                     </tr>
                     {% endfor %}
