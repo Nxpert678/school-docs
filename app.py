@@ -14,7 +14,8 @@ def load_users():
     # Создаём тестовых пользователей
     users = {
         "1": {"id": 1, "name": "Директор", "role": "director", "login": "director", "password": "123"},
-        "2": {"id": 2, "name": "Иванова Мария", "role": "teacher", "class": "9А", "login": "teacher", "password": "123"}
+        "2": {"id": 2, "name": "Иванова Мария", "role": "teacher", "class": "9А", "login": "teacher", "password": "123"},
+        "3": {"id": 3, "name": "Петров Сергей", "role": "teacher", "class": "9Б", "login": "petrov", "password": "123"}
     }
     with open('users.json', 'w', encoding='utf-8') as f:
         json.dump(users, f, ensure_ascii=False, indent=2)
