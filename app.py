@@ -1,100 +1,90 @@
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-import sqlite3
+from flask import Flask, render_template, request, redirect, url_for, session
+import psycopg2
+import psycopg2.extras
 import os
 from datetime import datetime
 
 app = Flask(__name__)
 app.secret_key = 'school_secret_key_2026'
 
-# ========== НАСТРОЙКА БАЗЫ ДАННЫХ ==========
-# На Render используем /var/data, на локальном компьютере - текущую папку
-DATA_DIR = '/var/data' if os.path.exists('/var/data') else '.'
-DATABASE = os.path.join(DATA_DIR, 'school.db')
+# ========== ПОДКЛЮЧЕНИЕ К БАЗЕ ДАННЫХ ==========
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
-    """Возвращает соединение с базой данных"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(DATABASE_URL)
     return conn
 
 def init_db():
-    """Создаёт таблицы и начальных пользователей при первом запуске"""
+    """Создаёт таблицы при первом запуске"""
     conn = get_db()
     c = conn.cursor()
     
     # Таблица пользователей
-    c.execute('''CREATE TABLE IF NOT EXISTS users
-                 (id INTEGER PRIMARY KEY AUTOINCREMENT,
-                  name TEXT NOT NULL,
-                  role TEXT NOT NULL,
-                  class TEXT,
-                  login TEXT UNIQUE NOT NULL,
-                  password TEXT NOT NULL)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+                 id SERIAL PRIMARY KEY,
+                 name TEXT NOT NULL,
+                 role TEXT NOT NULL,
+                 class TEXT,
+                 login TEXT UNIQUE NOT NULL,
+                 password TEXT NOT NULL)''')
     
     # Таблица заявлений
-    c.execute('''CREATE TABLE IF NOT EXISTS applications
-                 (number TEXT PRIMARY KEY,
-                  user_id INTEGER NOT NULL,
-                  user_name TEXT NOT NULL,
-                  type TEXT NOT NULL,
-                  date TEXT NOT NULL,
-                  reason TEXT NOT NULL,
-                  status TEXT NOT NULL,
-                  created_at TEXT NOT NULL,
-                  reject_reason TEXT,
-                  FOREIGN KEY (user_id) REFERENCES users (id))''')
+    c.execute('''CREATE TABLE IF NOT EXISTS applications (
+                 number TEXT PRIMARY KEY,
+                 user_id INTEGER NOT NULL,
+                 user_name TEXT NOT NULL,
+                 type TEXT NOT NULL,
+                 date TEXT NOT NULL,
+                 reason TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 created_at TEXT NOT NULL,
+                 reject_reason TEXT)''')
     
     # Таблица счётчика номеров
-    c.execute('''CREATE TABLE IF NOT EXISTS counter
-                 (id INTEGER PRIMARY KEY,
-                  next INTEGER NOT NULL)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS counter (
+                 id SERIAL PRIMARY KEY,
+                 next INTEGER NOT NULL)''')
     
-    # Добавляем счётчик, если его нет
+    # Добавляем счётчик
     c.execute("SELECT * FROM counter WHERE id=1")
     if not c.fetchone():
         c.execute("INSERT INTO counter (id, next) VALUES (1, 1)")
     
-    # Добавляем директора, если его нет
+    # Добавляем директора
     c.execute("SELECT * FROM users WHERE login='director'")
     if not c.fetchone():
-        c.execute("INSERT INTO users (name, role, login, password) VALUES ('Директор', 'director', 'director', '123')")
+        c.execute("INSERT INTO users (name, role, login, password) VALUES (%s, %s, %s, %s)",
+                  ('Директор', 'director', 'director', '123'))
     
-    # Добавляем учителей, если их нет
+    # Добавляем учителей
     teachers = [
         ("Иванова Мария", "teacher", "9А", "ivanova", "123"),
         ("Петров Сергей", "teacher", "9Б", "petrov", "123"),
         ("Сидорова Анна", "teacher", "10А", "sidorova", "123"),
-        ("Козлов Дмитрий", "teacher", "10Б", "kozlov", "123"),
-        ("Морозова Елена", "teacher", "11А", "morozova", "123"),
-        ("Волков Андрей", "teacher", "11Б", "volkov", "123"),
-        ("Зайцева Ольга", "teacher", "7А", "zaitseva", "123"),
     ]
     
     for name, role, class_name, login, password in teachers:
-        c.execute("SELECT * FROM users WHERE login=?", (login,))
+        c.execute("SELECT * FROM users WHERE login=%s", (login,))
         if not c.fetchone():
-            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (?, ?, ?, ?, ?)",
+            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (%s, %s, %s, %s, %s)",
                       (name, role, class_name, login, password))
     
     conn.commit()
     conn.close()
 
-# Инициализируем базу данных при запуске
 init_db()
 
-# ========== ФУНКЦИИ РАБОТЫ С БАЗОЙ ==========
 def get_next_number():
-    """Возвращает следующий номер заявления (APP-001, APP-002...)"""
     conn = get_db()
     c = conn.cursor()
     c.execute("SELECT next FROM counter WHERE id=1")
     next_num = c.fetchone()[0]
-    c.execute("UPDATE counter SET next = ? WHERE id=1", (next_num + 1,))
+    c.execute("UPDATE counter SET next = %s WHERE id=1", (next_num + 1,))
     conn.commit()
     conn.close()
     return f"APP-{next_num:03d}"
 
-# ========== РОУТЫ ==========
+# ========== МАРШРУТЫ ==========
 @app.route('/')
 def index():
     if 'user_id' in session:
@@ -108,8 +98,8 @@ def login():
         password = request.form['password']
         
         conn = get_db()
-        c = conn.cursor()
-        c.execute("SELECT * FROM users WHERE login=? AND password=?", (login, password))
+        c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        c.execute("SELECT * FROM users WHERE login=%s AND password=%s", (login, password))
         user = c.fetchone()
         conn.close()
         
@@ -136,7 +126,6 @@ def dashboard():
     conn = get_db()
     c = conn.cursor()
     
-    # Статистика
     c.execute("SELECT COUNT(*) FROM applications")
     all_apps = c.fetchone()[0]
     
@@ -149,7 +138,7 @@ def dashboard():
     c.execute("SELECT COUNT(*) FROM applications WHERE status='rejected'")
     rejected = c.fetchone()[0]
     
-    c.execute("SELECT COUNT(*) FROM applications WHERE user_id=?", (session['user_id'],))
+    c.execute("SELECT COUNT(*) FROM applications WHERE user_id=%s", (session['user_id'],))
     my_apps = c.fetchone()[0]
     
     conn.close()
@@ -182,8 +171,8 @@ def apply():
         c = conn.cursor()
         c.execute('''INSERT INTO applications 
                      (number, user_id, user_name, type, date, reason, status, created_at)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (number, session['user_id'], session['user_name'], app_type, date, reason, 'pending', 
+                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s)''',
+                  (number, session['user_id'], session['user_name'], app_type, date, reason, 'pending',
                    datetime.now().strftime("%Y-%m-%d %H:%M:%S")))
         conn.commit()
         conn.close()
@@ -198,8 +187,8 @@ def my_apps():
         return redirect(url_for('login'))
     
     conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT * FROM applications WHERE user_id=? ORDER BY created_at DESC", (session['user_id'],))
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    c.execute("SELECT * FROM applications WHERE user_id=%s ORDER BY created_at DESC", (session['user_id'],))
     applications = c.fetchall()
     conn.close()
     
@@ -211,7 +200,7 @@ def pending():
         return "Доступ запрещён", 403
     
     conn = get_db()
-    c = conn.cursor()
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     c.execute("SELECT * FROM applications WHERE status='pending' ORDER BY created_at DESC")
     applications = c.fetchall()
     conn.close()
@@ -225,7 +214,7 @@ def approve(number):
     
     conn = get_db()
     c = conn.cursor()
-    c.execute("UPDATE applications SET status='approved' WHERE number=?", (number,))
+    c.execute("UPDATE applications SET status='approved' WHERE number=%s", (number,))
     conn.commit()
     conn.close()
     
@@ -240,7 +229,7 @@ def reject(number):
         reason = request.form['reason']
         conn = get_db()
         c = conn.cursor()
-        c.execute("UPDATE applications SET status='rejected', reject_reason=? WHERE number=?", (reason, number))
+        c.execute("UPDATE applications SET status='rejected', reject_reason=%s WHERE number=%s", (reason, number))
         conn.commit()
         conn.close()
         return redirect(url_for('pending'))
@@ -255,8 +244,7 @@ def delete_application(number):
     conn = get_db()
     c = conn.cursor()
     
-    # Проверяем права на удаление
-    c.execute("SELECT user_id FROM applications WHERE number=?", (number,))
+    c.execute("SELECT user_id FROM applications WHERE number=%s", (number,))
     result = c.fetchone()
     
     if not result:
@@ -267,13 +255,13 @@ def delete_application(number):
         conn.close()
         return "У вас нет прав на удаление", 403
     
-    c.execute("DELETE FROM applications WHERE number=?", (number,))
+    c.execute("DELETE FROM applications WHERE number=%s", (number,))
     conn.commit()
     conn.close()
     
     return redirect(url_for('my_apps'))
 
-# ========== API ДЛЯ КАРТОЧЕК ==========
+# ========== API ==========
 @app.route('/api/applications')
 def api_applications():
     if 'user_id' not in session:
@@ -282,7 +270,7 @@ def api_applications():
     status = request.args.get('status', 'all')
     
     conn = get_db()
-    c = conn.cursor()
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     
     if status == 'pending':
         c.execute("SELECT * FROM applications WHERE status='pending' ORDER BY created_at DESC")
@@ -296,7 +284,6 @@ def api_applications():
     apps = c.fetchall()
     conn.close()
     
-    # Преобразуем Row в список словарей
     result = []
     for app in apps:
         result.append({
@@ -311,7 +298,6 @@ def api_applications():
     
     return result
 
-# ========== API ДЛЯ УДАЛЕНИЯ (ДЛЯ МОДАЛЬНОГО ОКНА) ==========
 @app.route('/api/delete/<number>')
 def api_delete_application(number):
     if 'user_id' not in session:
@@ -320,20 +306,18 @@ def api_delete_application(number):
     conn = get_db()
     c = conn.cursor()
     
-    # Проверяем, существует ли заявление и есть ли права
-    c.execute("SELECT user_id FROM applications WHERE number=?", (number,))
+    c.execute("SELECT user_id FROM applications WHERE number=%s", (number,))
     result = c.fetchone()
     
     if not result:
         conn.close()
         return {"error": "Заявление не найдено"}, 404
     
-    # Удалить может: владелец ИЛИ директор
     if result[0] != session['user_id'] and session['user_role'] != 'director':
         conn.close()
         return {"error": "Нет прав"}, 403
     
-    c.execute("DELETE FROM applications WHERE number=?", (number,))
+    c.execute("DELETE FROM applications WHERE number=%s", (number,))
     conn.commit()
     conn.close()
     
@@ -346,7 +330,7 @@ def users():
         return "Доступ запрещён", 403
     
     conn = get_db()
-    c = conn.cursor()
+    c = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     c.execute("SELECT * FROM users ORDER BY id")
     users_list = c.fetchall()
     conn.close()
@@ -369,10 +353,10 @@ def add_user():
         c = conn.cursor()
         
         try:
-            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (?, ?, ?, ?, ?)",
+            c.execute("INSERT INTO users (name, role, class, login, password) VALUES (%s, %s, %s, %s, %s)",
                       (name, role, class_name, login, password))
             conn.commit()
-        except sqlite3.IntegrityError:
+        except Exception:
             conn.close()
             return "Ошибка: пользователь с таким логином уже существует"
         
@@ -391,7 +375,7 @@ def delete_user(user_id):
     
     conn = get_db()
     c = conn.cursor()
-    c.execute("DELETE FROM users WHERE id=?", (user_id,))
+    c.execute("DELETE FROM users WHERE id=%s", (user_id,))
     conn.commit()
     conn.close()
     
